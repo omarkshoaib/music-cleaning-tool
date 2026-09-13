@@ -1,0 +1,23 @@
+clean songs/
+.work/
+logs/
+checkpoints/
+__pycache__/
+*.pyc
+
+# Local credentials and environments
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+.agents/
+.codex/
+*.pem
+*.key
+
+# Editor and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
