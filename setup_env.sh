@@ -23,8 +23,8 @@ echo "[setup] installing clearvoice + demucs + gradio"
 python -m pip install clearvoice demucs gradio soundfile librosa scipy
 
 # Pin torch LAST so nothing above silently upgrades it. cu121 covers sm_75 (Quadro RTX 6000).
-echo "[setup] pinning torch 2.4.1 / torchaudio 2.4.1 (cu121)"
-python -m pip install torch==2.4.1 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cu121
+echo "[setup] pinning torch 2.5.1 / torchaudio 2.5.1 (cu121)"
+python -m pip install torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
 
 python - <<'PY'
 import torch, torchaudio

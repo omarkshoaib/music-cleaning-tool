@@ -319,6 +319,7 @@ def build_ui() -> gr.Blocks:
     with gr.Blocks(title="Clearer Voice — clean songs") as demo:
         gr.Markdown(DESCRIPTION)
         staged_state = gr.State({})
+        percussion_state = gr.State(False)
 
         with gr.Row():
             with gr.Column(scale=1):
@@ -355,7 +356,7 @@ def build_ui() -> gr.Blocks:
         shoutout_run.click(run_shoutout, inputs=[shoutout_source, shoutout_upload, shoutout_prompt], outputs=[shoutout_target, shoutout_residual, shoutout_status])
         run.click(
             run_engines,
-            inputs=[source, engine_select, False, staged_state],
+            inputs=[source, engine_select, percussion_state, staged_state],
             outputs=[*players, compare_box, choice, status, download, staged_state],
         )
         save.click(
