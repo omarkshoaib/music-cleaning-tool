@@ -26,12 +26,11 @@ from audio_io import (
     probe,
     write_wav,
 )
+from app_sam import separate_shoutout
+
 from engines import (
-    ENGINE_CHAIN,
     ENGINE_CHOICES,
     ENGINE_CLEARVOICE,
-    ENGINE_DEMUCS,
-    PERCUSSION_ENGINES,
     EngineError,
 )
 
@@ -48,11 +47,7 @@ LOG_PATH = OUTPUT_DIR / "_log.jsonl"
 # box; 8731 is outside that range. Override with CV_PORT if it ever collides.
 PORT = int(os.environ.get("CV_PORT", "8731"))
 
-ENGINE_SLUGS = {
-    ENGINE_CLEARVOICE: "clearervoice",
-    ENGINE_DEMUCS: "demucs",
-    ENGINE_CHAIN: "demucs-clearervoice",
-}
+ENGINE_SLUGS = {ENGINE_CLEARVOICE: "clearervoice"}
 
 
 # --------------------------------------------------------------------------
@@ -290,6 +285,21 @@ def save_choice(choice, state):
     return (*players, gr.update(visible=False), status, str(saved), {})
 
 
+def list_clearvoice_outputs():
+    return sorted(str(p) for p in OUTPUT_DIR.glob("*.mp3") if "clearervoice" in p.name)
+
+def run_shoutout(selected_path, uploaded_path, prompt):
+    audio_path = selected_path or uploaded_path
+    if not audio_path: raise gr.Error("Select or upload a ClearerVoice output first.")
+    if not prompt or not prompt.strip(): raise gr.Error("Describe the shoutout sound.")
+    try:
+        target, residual = separate_shoutout(Path(audio_path), prompt, WORK_DIR / "shoutouts")
+        return str(target), str(residual), f"Saved isolated shoutout and residual audio."
+    except Exception as exc:
+        log.exception("SAM-Audio failed")
+        raise gr.Error(f"SAM-Audio failed: {exc}") from exc
+
+
 DESCRIPTION = """
 # Clearer Voice — vocals without the music
 
@@ -299,8 +309,9 @@ Tick **one** engine and the result is saved to `clean songs/` straight away.
 Tick **several** and they all run so you can compare — then only the version you
 pick gets saved, and the rest are deleted.
 
-Demucs is built for music and usually wins on real songs. ClearerVoice is a
-speech-enhancement model that treats the instruments as noise. The chain runs both.
+ClearerVoice removes music while preserving speech.
+
+Use SAM-Audio below to isolate producer names and shoutouts from a saved ClearerVoice output.
 """.strip()
 
 
@@ -314,18 +325,21 @@ def build_ui() -> gr.Blocks:
                 source = gr.Audio(label="Song", type="filepath", sources=["upload", "microphone"])
                 engine_select = gr.CheckboxGroup(
                     choices=ENGINE_CHOICES,
-                    value=[ENGINE_DEMUCS],
-                    label="Engines to run",
-                    info="More than one? They all run and you choose the keeper. Any length — long tracks are processed in blocks.",
-                )
-                percussion = gr.Checkbox(
-                    value=False,
-                    label="Keep percussion (duff)",
-                    info="Folds the drums stem back in instead of discarding it.",
+                    value=[ENGINE_CLEARVOICE],
+                    label="Engine",
+                    info="ClearerVoice processes any length in blocks.",
                 )
                 run = gr.Button("Remove the music", variant="primary")
                 status = gr.Textbox(label="Status", lines=4, interactive=False)
                 download = gr.File(label="Saved file", interactive=False)
+                gr.Markdown("## Find producer names and shoutouts")
+                shoutout_source = gr.Dropdown(choices=list_clearvoice_outputs(), label="ClearerVoice output", allow_custom_value=True)
+                shoutout_upload = gr.Audio(label="Or upload audio", type="filepath", sources=["upload"])
+                shoutout_prompt = gr.Textbox(value="producer name or shoutout", label="Sound to isolate")
+                shoutout_run = gr.Button("Isolate shoutouts", variant="secondary")
+                shoutout_target = gr.Audio(label="Isolated shoutouts", interactive=False)
+                shoutout_residual = gr.Audio(label="Audio without shoutouts", interactive=False)
+                shoutout_status = gr.Textbox(label="SAM-Audio status", interactive=False)
 
             with gr.Column(scale=1):
                 players = [
@@ -337,10 +351,11 @@ def build_ui() -> gr.Blocks:
                     choice = gr.Radio(choices=[], label="Best version", interactive=True)
                     save = gr.Button("Save this one, delete the rest", variant="primary")
 
-        engine_select.change(toggle_percussion, inputs=engine_select, outputs=percussion)
+        shoutout_source.change(lambda p: p, inputs=shoutout_source, outputs=shoutout_source)
+        shoutout_run.click(run_shoutout, inputs=[shoutout_source, shoutout_upload, shoutout_prompt], outputs=[shoutout_target, shoutout_residual, shoutout_status])
         run.click(
             run_engines,
-            inputs=[source, engine_select, percussion, staged_state],
+            inputs=[source, engine_select, False, staged_state],
             outputs=[*players, compare_box, choice, status, download, staged_state],
         )
         save.click(
