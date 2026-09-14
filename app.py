@@ -29,8 +29,11 @@ from audio_io import (
 from app_sam import separate_shoutout
 
 from engines import (
+    ENGINE_CHAIN,
     ENGINE_CHOICES,
     ENGINE_CLEARVOICE,
+    ENGINE_DEMUCS,
+    PERCUSSION_ENGINES,
     EngineError,
 )
 
@@ -47,7 +50,7 @@ LOG_PATH = OUTPUT_DIR / "_log.jsonl"
 # box; 8731 is outside that range. Override with CV_PORT if it ever collides.
 PORT = int(os.environ.get("CV_PORT", "8731"))
 
-ENGINE_SLUGS = {ENGINE_CLEARVOICE: "clearervoice"}
+ENGINE_SLUGS = {ENGINE_CLEARVOICE: "clearervoice", ENGINE_DEMUCS: "demucs", ENGINE_CHAIN: "demucs-clearervoice"}
 
 
 # --------------------------------------------------------------------------
@@ -309,7 +312,7 @@ Tick **one** engine and the result is saved to `clean songs/` straight away.
 Tick **several** and they all run so you can compare — then only the version you
 pick gets saved, and the rest are deleted.
 
-ClearerVoice removes music while preserving speech.
+Demucs separates vocals; ClearerVoice removes music while preserving speech.
 
 Use SAM-Audio below to isolate producer names and shoutouts from a saved ClearerVoice output.
 """.strip()
@@ -326,9 +329,9 @@ def build_ui() -> gr.Blocks:
                 source = gr.Audio(label="Song", type="filepath", sources=["upload", "microphone"])
                 engine_select = gr.CheckboxGroup(
                     choices=ENGINE_CHOICES,
-                    value=[ENGINE_CLEARVOICE],
-                    label="Engine",
-                    info="ClearerVoice processes any length in blocks.",
+                    value=[ENGINE_DEMUCS],
+                    label="Engines to run",
+                    info="More than one? They all run and you choose the keeper.",
                 )
                 run = gr.Button("Remove the music", variant="primary")
                 status = gr.Textbox(label="Status", lines=4, interactive=False)
@@ -352,11 +355,12 @@ def build_ui() -> gr.Blocks:
                     choice = gr.Radio(choices=[], label="Best version", interactive=True)
                     save = gr.Button("Save this one, delete the rest", variant="primary")
 
-        shoutout_source.change(lambda p: p, inputs=shoutout_source, outputs=shoutout_source)
+        percussion = gr.Checkbox(value=False, label="Keep percussion (duff)", info="Folds drums back in.")
+        engine_select.change(toggle_percussion, inputs=engine_select, outputs=percussion)
         shoutout_run.click(run_shoutout, inputs=[shoutout_source, shoutout_upload, shoutout_prompt], outputs=[shoutout_target, shoutout_residual, shoutout_status])
         run.click(
             run_engines,
-            inputs=[source, engine_select, percussion_state, staged_state],
+            inputs=[source, engine_select, percussion, staged_state],
             outputs=[*players, compare_box, choice, status, download, staged_state],
         )
         save.click(
